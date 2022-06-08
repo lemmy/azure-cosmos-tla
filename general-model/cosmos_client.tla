@@ -6,7 +6,7 @@
 (* the protocol implementation.                                            *)
 (***************************************************************************)
 
-EXTENDS Integers, Sequences, FiniteSets, Functions, SequencesExt
+EXTENDS Integers, Sequences, FiniteSets, Functions, SequencesExt, TLC
 
 Merge(s1, s2) ==
     SetToSortSeq(Range(s1) \cup Range(s2), <)
@@ -76,7 +76,15 @@ Operations == [type: {"write"}, data: Nat, region: WriteRegions, client: Clients
               
               (* Value used by clients *)
               value = 0;  
-              
+
+    define {
+        Truncate(db) ==
+            LET lower == IF Len(db) > K
+                         THEN Len(db) - K
+                         ELSE 1
+            IN lower..Len(db)
+    }
+
     (* -------------------------------------------------------------- *)
     (* --------------------- CLIENT ACTIONS ------------------------- *)
     (* -------------------------------------------------------------- *)
@@ -122,6 +130,17 @@ Operations == [type: {"write"}, data: Nat, region: WriteRegions, client: Clients
             Database[d] := Merge(Database[d], Database[s]);
         }
     }
+
+    macro crash()
+    {
+        with (r \in WriteRegions)
+        {   
+            with (bound \in Truncate(Database[r]))
+            {
+                Database[r] := SubSeq(Database[r], 1, bound);
+            }
+        }
+    }
     
     (* -------------------------------------------------------------- *)
     (* -------------------- CLIENT PROCESSES ------------------------ *)
@@ -149,14 +168,26 @@ Operations == [type: {"write"}, data: Nat, region: WriteRegions, client: Clients
         database_action:
         while(TRUE)
         {
-            replicate();
-        }
+            with (rs \in WriteRegions) {
+                either { replicate(); }
+                or { if (Consistency # "Strong") { crash(); } }
+            }
+        };
     }
     
 }
 *)
 \* BEGIN TRANSLATION
-VARIABLES History, Database, value, session_token
+VARIABLES History, Database, value
+
+(* define statement *)
+Truncate(db) ==
+    LET lower == IF Len(db) > K
+                 THEN Len(db) - K
+                 ELSE 1
+    IN lower..Len(db)
+
+VARIABLE session_token
 
 vars == << History, Database, value, session_token >>
 
@@ -187,9 +218,16 @@ client(self) == \/ /\ value' = value + 1
                    /\ session_token' = [session_token EXCEPT ![self] = Last(Database[self[1]])]
                    /\ UNCHANGED <<Database, value>>
 
-CosmosDB == /\ \E s \in WriteRegions:
-                 \E d \in Regions:
-                   Database' = [Database EXCEPT ![d] = Merge(Database[d], Database[s])]
+CosmosDB == /\ \E rs \in WriteRegions:
+                 \/ /\ \E s \in WriteRegions:
+                         \E d \in Regions:
+                           Database' = [Database EXCEPT ![d] = Merge(Database[d], Database[s])]
+                 \/ /\ IF Consistency # "Strong"
+                          THEN /\ \E r \in WriteRegions:
+                                    \E bound \in Truncate(Database[r]):
+                                      Database' = [Database EXCEPT ![r] = SubSeq(Database[r], 1, bound)]
+                          ELSE /\ TRUE
+                               /\ UNCHANGED Database
             /\ UNCHANGED << History, value, session_token >>
 
 Next == CosmosDB
@@ -249,9 +287,10 @@ ReadAfterWrite == \A i, j \in DOMAIN History : /\ i < j
 Linearizability == \A i, j \in DOMAIN History : /\ i < j
                                                 => History[j].data >= History[i].data
 
-BoundedStaleness == /\ \A i, j \in Regions : Last(Database[i]) - Last(Database[j]) \in -K..K
-                    /\ \A r \in Regions : MonotonicReadPerRegion(r)
-                    /\ ReadYourWrite
+BoundedStaleness == 
+    /\ \A i, j \in Regions : Last(Database[i]) - Last(Database[j]) \in -K..K
+    /\ \A r \in Regions : MonotonicReadPerRegion(r)
+    /\ ReadYourWrite
 
 ConsistentPrefix == \A r \in Regions : /\ MonotonicWritePerRegion(r)
                                        /\ AnyReadPerRegion(r)
@@ -275,6 +314,9 @@ Invariant == /\ TypeOK
                   [] Consistency = "Eventual" -> Eventual
 
 Liveness == <>[] (\A i, j \in Regions : Database[i] = Database[j])
+
+
+THEOREM Spec => []Invariant
 
 -----------------------------------------------------------------------------
 (* Constraint the states-space to be finite for model-checking. *)
