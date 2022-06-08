@@ -1,15 +1,20 @@
 ---- MODULE CosmosMessages ----
 EXTENDS Integers
 
+Hierarchy ==
+    \* This is more of partial order than total order because of session consistency.
+    [
+        Strong |-> 5, Bounded_staleness |-> 4, Session |-> 3, Consistent_prefix |-> 2, Eventual |-> 1
+    ]
+
 Levels ==
-    {"Strong", "Bounded_staleness", "Session", "Consistent_prefix", "Eventual"}
+    \*{"Strong", "Bounded_staleness", "Session", "Consistent_prefix", "Eventual"}
+    DOMAIN Hierarchy
 
 Consistency ==
     [level: Levels, lsn: Int] \* log-sequence-number (lsn)
 
 CONSTANT Regions
-
-CONSTANT WriteRegions
 
 CONSTANT Clients
 
@@ -31,7 +36,7 @@ Request ==
         old: Data \cup {Null},    \* If not Null, the expected data to be overriden (If-Match).  Note that If-Match & etags are essentially compare-and-swap.
         type: {"Write"}, 
         consistency: Consistency, 
-        region: WriteRegions, \* The region the original write request was sent to.
+        region: Regions, \* The region the original write request was sent to.
         orig: Clients
     ]
 
@@ -56,7 +61,7 @@ Response ==
         \* protocol (e.g. TCP).
         type: {"ACK", "NACK", "Error"},
         consistency: Consistency, 
-        region: WriteRegions, \* The region the original read request was sent to.
+        region: Regions, \* The region the original read request was sent to.
         orig: {"cosmos"}
     ]
 

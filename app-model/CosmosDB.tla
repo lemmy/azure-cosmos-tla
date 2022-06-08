@@ -23,11 +23,17 @@ https://docs.microsoft.com/en-us/azure/cosmos-db/linux-emulator?tabs=ssl-netstd2
 - Eventual Consistency
 - Bounded Staleness
 - Consistent Prefix
+https://docs.microsoft.com/en-us/azure/cosmos-db/consistency-levels
+https://docs.microsoft.com/en-us/azure/cosmos-db/global-dist-under-the-hood
 
-- relaxing consistency levels on a per-request basis
+- relaxing (downgrading) consistency levels on a per read-request basis
+https://docs.microsoft.com/en-in/azure/cosmos-db/sql/how-to-manage-consistency#override-the-default-consistency-level
+https://stackoverflow.com/questions/71368901/cosmos-db-consistency-level-override-for-query-does-it-actually-have-only-3
 
 - multi-region writes & conflict feed
+https://docs.microsoft.com/en-us/azure/cosmos-db/sql/how-to-manage-conflicts
 https://docs.microsoft.com/en-us/azure/cosmos-db/sql/database-transactions-optimistic-concurrency
+https://microsoft.sharepoint.com/:w:/t/DocumentDB/EckSAvpVmVNCvyoTe9zZDrgBBtFDQhLPIL3UekNLm9JZ4A
 
 - multiple documents/partition key (logical/physical partitions)
 https://docs.microsoft.com/en-us/azure/cosmos-db/partitioning-overview
@@ -57,6 +63,10 @@ EXTENDS Integers, TLC, Sequences, SequencesExt, Bags, BagsExt, Functions
 
 E ==
     \* If true, reads and writes exhibit errors.
+    TRUE
+
+L ==
+    \* If true, read and write responses are lossy.
     TRUE
 
 CONSTANT Regions
@@ -126,13 +136,24 @@ ReadStrongResponse(request) ==
 
 ReadSessionResponse(request) ==
     (IF E THEN {CError(request)} ELSE {}) \cup
-        \* {} models 404 in Cosmos DB
+        \* If WritesrInRange = {}, no value for that doc has ever been written,
+        \* we model is modeled as a 404 in Cosmos DB.
         LET InRange == { database[i] : i \in request.consistency.lsn..Len(database) }
             WritesInRange == { w \in InRange : w.type = "Write" /\ w.doc = request.doc }
         IN { CReply(request, w.data, w.consistency.lsn) : w \in WritesInRange }
+    \* TODO: We don't explicitly model the database's consistency level.  Instead, we
+    \* TODO: expect the clients to include the desired consistency level in each requests.
+    \* TODO: To model a read without a session token while the database operates under
+    \* TODO: session consistency, the client has to set the requets's consistency level to
+    \* TODO: "Consistet_prefix".
+
+ReadConsistentPrefixResponse(request) ==
+    \* TODO: Under consisten prefix, we may read any write older than the last read
+    \* TODO: of that client in that region.
+    FALSE 
 
 ReadEventualResponse(request) ==
-    FALSE \* TODO
+    FALSE \* TODO: Under eventual consistency, we may read any write (of that doc). 
 
 ReadResponse(request) ==
     CASE request.consistency.level = "Strong" -> ReadStrongResponse(request)
@@ -195,7 +216,7 @@ CosmosRead ==
         /\ database' = Append(database, req)
         /\ \/ \E res \in ReadResponse(req):
                 outbox' = [outbox EXCEPT ![req.orig] = Append(@, res)]
-        \*    \/ UNCHANGED outbox \* Response is lost.
+        \*    \/ IF L THEN UNCHANGED outbox ELSE FALSE \* Response is lost.
         /\ inbox' = BagRemove(inbox, req)
         /\ UNCHANGED cvars
 
@@ -246,7 +267,6 @@ CInit ==
                         ]
                     ]
 
-
 SendWriteRequest ==
     /\ UNCHANGED <<client, session>>
     /\ \E c \in Clients :
@@ -283,10 +303,10 @@ SendReadRequest ==
             doc |-> "doc1",
             type |-> "Read",
             \* Swap the definition of consistency between "session" and "strong" here.
-            \* consistency |-> [level |-> "Session", lsn |-> session],
-            consistency |-> IF client[c] # Null 
-                            THEN client[c].consistency
-                            ELSE [level |-> "Session", lsn |-> 1],
+            consistency |-> [level |-> "Session", lsn |-> session],
+            \* consistency |-> IF client[c] # Null 
+            \*                 THEN client[c].consistency
+            \*                 ELSE [level |-> "Session", lsn |-> 1],
             region |-> "R",
             orig |-> c
            ]   
@@ -364,6 +384,7 @@ Spec ==
     /\ WF_outbox(CosmosRead)
     /\ WF_outbox(CosmosWrite)
 
+\* TODO Rename "Monotonic" to "Durable"?!
 Monotonic ==
     \* The (log of the) database only ever grows.
     [][Len(database') >= Len(database)]_vars
@@ -388,8 +409,15 @@ SessionMonotonic ==
 
 ================================================================================
 
+Distributed Consisteny:
+- https://blog.acolyer.org/2016/02/26/distributed-consistency-and-session-anomalies/
+- https://www.microsoft.com/en-us/research/wp-content/uploads/2011/10/ConsistencyAndBaseballReport.pdf
+- https://jepsen.io/consistency
 
 Random material:
 
+- https://azure.microsoft.com/en-us/blog/azure-cosmos-db-pushing-the-frontier-of-globally-distributed-databases/
 - https://www.youtube.com/watch?v=-4FsGysVD14
 - https://medium.com/swlh/replication-and-linearizability-in-distributed-systems-cd9036ea7b40
+- https://stackoverflow.com/a/66921546/6291195
+- https://parveensingh.com/cosmosdb-consistency-levels/
