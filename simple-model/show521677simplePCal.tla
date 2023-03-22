@@ -158,4 +158,25 @@ ValueEventuallyCorrect ==
 WorkerReceivesCorrectValue ==
     pc["worker"] = "Done" => workerValue = "taskValue"
 
+---------------------------------------------------------------------
+
+View ==
+    <<log, serviceBus, pc, commitIndex, frontdoorToken, workerToken, workerValue>>
+
+Alias ==
+    IF workerToken = defaultInitValue
+    THEN
+    [
+        db |-> log,
+        serviceBus |-> serviceBus,
+        workerDispatcher |-> frontdoorToken
+    ]
+    ELSE
+    [
+        db |-> log,
+        serviceBus |-> serviceBus,
+        workerDispatcher |-> frontdoorToken,
+        workerToken |-> workerToken,
+        workerValue |-> workerValue
+    ]
 ====
