@@ -43,7 +43,7 @@ frontdoorWriteTaskDataReceive ==
     /\ frontdoorPC = "frontdoorWriteTaskDataReceive"
     /\ Client!ReceiveWriteResult("frontdoor")
     /\ frontdoorToken' = Client!ReceivedWriteToken("frontdoor")
-    /\ serviceBus' = <<"taskKey">>
+    /\ serviceBus' = << [k |-> "taskKey", t |-> frontdoorToken']>>
     /\ frontdoorPC' = "Done"
     /\ UNCHANGED <<clientVarsExceptNetwork, workerPC, workerToken, workerValue>>
 
@@ -54,9 +54,9 @@ frontdoorDone ==
 workerBeginTaskSend ==
     /\ workerPC = "workerBeginTaskSend"
     /\ serviceBus # <<>>
-    /\ LET taskKey == Head(serviceBus)
+    /\ LET r == Head(serviceBus)
        IN  /\ serviceBus' = Tail(serviceBus)
-           /\ Client!RequestRead("worker", taskKey, SessionConsistency, workerToken)
+           /\ Client!RequestRead("worker", r.k, SessionConsistency, workerToken)
            /\ workerPC' = "workerBeginTaskReceive"
            /\ UNCHANGED <<clientVarsExceptNetwork, frontdoorToken, frontdoorPC, workerToken, workerValue>>
 

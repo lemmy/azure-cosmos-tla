@@ -341,3 +341,8 @@ _apalache-out/
 */*.toolbox/
 .ammonite/
 .metals/
+
+frob/*
+brab/*
+murat/*
+DynamicQuorum/*
