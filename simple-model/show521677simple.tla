@@ -70,14 +70,6 @@ Init ==
                 backendValue' = read.value
     /\ UNCHANGED <<dbVars, requests, pending, frontendToken>>
 
-\* cosmosTruncateLog ==
-\*     /\ DB!TruncateLog
-\*     /\ UNCHANGED specVars
-
-\* cosmosIncreaseReadIndexAndOrCommitIndex ==
-\*     /\ DB!IncreaseReadIndexAndOrCommitIndex
-\*     /\ UNCHANGED specVars
-
 cosmos ==
     /\ DB!Next
     /\ UNCHANGED specVars
@@ -87,8 +79,6 @@ Next ==
     \/ 3FrontendEnqueue
     \/ 5BackendRead
     \/ cosmos
-    \* \/ cosmosTruncateLog
-    \* \/ cosmosIncreaseReadIndexAndOrCommitIndex
 
 Spec == /\ Init /\ [][Next]_vars
         /\ WF_vars(1FrontendWrite \/ 3FrontendEnqueue)
@@ -97,37 +87,8 @@ Spec == /\ Init /\ [][Next]_vars
 
 ----------------------------------------------------------------------------
 
-WorkerReceivesCorrectValueOld ==
-    [][Len(serviceBus) > Len(serviceBus')
-        => backendValue' = "v1"]_vars
-
-WorkerReceivesCorrectValueBroken ==
-    \* This property does not hold because it doesn't suffice for the value to
-    \* appear in the log.  The value has to be replicated, i.e., the commitIndex
-    \* has to be incremented accordingly.  In other words, the write is not yet
-    \* durable when the value appears in the log.
-    \A val \in Values: 
-        ((\E i \in 1..Len(log): 
-            log[i].value = val) ~> backendValue = val)
-
-WorkerReceivesCorrectValueTooStrong ==
-    \A val \in Values: 
-        (\E i \in 1..Len(log):
-            \* A value is durable if it appears in the log and its log
-             \* position is past the commitIndex.
-            /\ log[i].value = val
-            /\ commitIndex >= i) ~> backendValue = val
-
 WorkerReceivesCorrectValue ==
     \A val \in Values:
         (val \notin requests) ~> backendValue = val
 
-WorkDone ==
-    []<><<5BackendRead>>_vars
-
-View ==
-    <<myepoch % 2, commitIndex, readIndex, log, specVars>>
-
-Constraint ==
-    myepoch < 4
 ====
