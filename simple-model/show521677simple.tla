@@ -19,8 +19,8 @@ CONSTANTS StrongConsistency, BoundedStaleness,
  Values == {"v1","v2"}
  NoValue == "NoValue"
 
- dbVarsExceptLog == <<commitIndex, readIndex>>
- dbVars == <<dbVarsExceptLog, log>>
+ dbVarsLog == <<commitIndex, readIndex>>
+ dbVars == <<dbVarsLog, log>>
 
  DB == INSTANCE CosmosDB WITH
             WriteConsistencyLevel <- WriteConstLevel,
@@ -29,7 +29,7 @@ CONSTANTS StrongConsistency, BoundedStaleness,
             \* complicate this spec.
             epoch <- 1
  
- Read(t, k) ==
+ DBRead(t, k) ==
     IF "RCL" \notin DOMAIN IOEnv THEN DB!StrongConsistencyRead(k)
     ELSE
         CASE IOEnv.RCL = "strong" -> DB!StrongConsistencyRead(k)
@@ -57,7 +57,7 @@ Init ==
 1FrontendWrite ==
     /\ future = Nil
     /\ \E val \in requests: DB!WriteInit("k", val, LAMBDA t: future' = t)
-    /\ UNCHANGED <<dbVarsExceptLog, requests, queue, backend>>
+    /\ UNCHANGED <<dbVarsLog, requests, queue, backend>>
 
 3FrontendEnqueue ==
     /\ future # Nil
@@ -69,8 +69,7 @@ Init ==
 5BackendRead ==
     /\ queue # <<>>
     /\ queue' = Tail(queue)
-    /\ \E read \in
-            Read(Head(queue).t, Head(queue).k) :
+    /\ \E read \in DBRead(Head(queue).t, Head(queue).k) :
                 backend' = read.value
     /\ UNCHANGED <<dbVars, requests, future>>
 
