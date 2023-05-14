@@ -15,7 +15,7 @@ CONSTANTS StrongConsistency, BoundedStaleness,
      
  VARIABLES log, commitIndex, readIndex
 
- Keys == {"k1"}
+ Keys == {"k"}
  Values == {"v1","v2"}
  NoValue == "NoValue"
 
@@ -56,15 +56,14 @@ Init ==
 
 1FrontendWrite ==
     /\ future = Nil
-    /\ \E val \in requests: 
-        DB!WriteInit("k1", val, LAMBDA t: future' = t)
+    /\ \E val \in requests: DB!WriteInit("k", val, LAMBDA t: future' = t)
     /\ UNCHANGED <<dbVarsExceptLog, requests, messageQueue, backendValue>>
 
 3FrontendEnqueue ==
     /\ future # Nil
     /\ DB!WriteSucceed(future)
     /\ requests' = requests \ { future.value }
-    /\ messageQueue' = << [ k |-> "k1", t |-> future ] >>
+    /\ messageQueue' = << [ k |-> "k", t |-> future ] >>
     /\ UNCHANGED <<dbVars, future, backendValue>>
 
 5BackendRead ==
