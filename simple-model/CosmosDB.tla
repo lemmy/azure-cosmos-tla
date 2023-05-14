@@ -215,9 +215,10 @@ WritesAccepted ==
 \* representative of that write.
 \* This token is suitable both as a fresh session token, and as an ephemeral
 \* token tracking the progress of a write from init to success or failure.
-WriteInitToken(value) == [
+WriteInitToken(key, value) == [
     epoch |-> epoch,
     checkpoint |-> Len(log) + 1,
+    key |-> key,
     value |-> value
 ]
 
@@ -230,10 +231,10 @@ WriteInit(key, value, Op(_)) ==
             key |-> key,
             value |-> value
        ])
-    /\ Op(WriteInitToken(value))
+    /\ Op(WriteInitToken(key, value))
 
 SessionTokenIsValid(token) ==
-    SessionTokenLEQ(token, WriteInitToken(token.value))
+    SessionTokenLEQ(token, WriteInitToken(token.key, token.value))
 
 UpdateTokenFromRead(origToken, read) == [
     epoch |-> epoch,
