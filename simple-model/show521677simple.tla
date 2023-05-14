@@ -56,7 +56,8 @@ Init ==
 
 1FrontendWrite ==
     /\ future = Nil
-    /\ \E val \in requests: DB!WriteInit("k", val, LAMBDA t: future' = t)
+    /\ \E val \in requests:
+            DB!WriteInit("k", val, LAMBDA t: future' = t)
     /\ UNCHANGED <<dbVarsLog, requests, queue, backend>>
 
 3FrontendEnqueue ==
@@ -70,7 +71,7 @@ Init ==
     /\ queue # <<>>
     /\ queue' = Tail(queue)
     /\ \E read \in DBRead(Head(queue).t, Head(queue).k) :
-                backend' = read.value
+            backend' = read.value
     /\ UNCHANGED <<dbVars, requests, future>>
 
 cosmos ==
@@ -83,8 +84,7 @@ Next ==
     \/ 5BackendRead
     \/ cosmos
 
-Spec == /\ Init /\ [][Next]_vars
-        /\ WF_vars(5BackendRead)
+Spec == Init /\ [][Next]_vars /\ WF_vars(5BackendRead)
 
 ----------------------------------------------------------------------------
 
