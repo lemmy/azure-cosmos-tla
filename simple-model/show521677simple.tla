@@ -64,7 +64,7 @@ Init ==
     /\ future # Nil
     /\ DB!WriteSucceed(future)
     /\ requests' = requests \ { future.value }
-    /\ queue' = << [ k |-> "k", t |-> future ] >>
+    /\ queue' = queue \o << [ k |-> future.key, t |-> future ] >>
     /\ UNCHANGED <<dbVars, future, backend>>
 
 5BackendRead ==
