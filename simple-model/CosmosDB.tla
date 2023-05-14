@@ -210,16 +210,6 @@ WritesAccepted ==
         \* allow writes that push Len(log) one unit too far
         Len(log) - commitIndex < StalenessBound)
 
-\* This operator initiates a write, adding it to the log.
-\* It is only useful alongside other constructs, such as:
-\* - WritesAccepted
-\* - WriteInitToken
-WriteInit(key, value) ==
-    /\ log' = Append(log, [
-            key |-> key,
-            value |-> value
-       ])
-
 \* Adjacent to WriteInit, this operator will return a token
 \* representative of that write.
 \* This token is suitable both as a fresh session token, and as an ephemeral
@@ -228,6 +218,17 @@ WriteInitToken == [
     epoch |-> epoch,
     checkpoint |-> Len(log) + 1
 ]
+
+\* This operator initiates a write, adding it to the log.
+\* It is only useful alongside other constructs, such as:
+\* - WritesAccepted
+\* - WriteInitToken
+WriteInit(key, value, Op(_)) ==
+    /\ log' = Append(log, [
+            key |-> key,
+            value |-> value
+       ])
+    /\ Op(WriteInitToken)
 
 SessionTokenIsValid(token) ==
     SessionTokenLEQ(token, WriteInitToken)
@@ -240,7 +241,7 @@ UpdateTokenFromRead(origToken, read) == [
 \* This predicate indicates whether a write identified by the given
 \* token can succeed. Writes can always happen to fail, but successful
 \* writes must meet the conditions listed here.
-WriteCanSucceed(token) ==
+WriteSucceed(token) ==
     /\ SessionTokenIsValid(token)
     /\ (WriteConsistencyLevel = StrongConsistency =>
         /\ token.epoch = epoch

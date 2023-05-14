@@ -1,11 +1,18 @@
 ---- MODULE show521677simple ----
-EXTENDS TLC, Naturals, Sequences
+EXTENDS TLC, Naturals, Sequences, IOUtils
 
 CONSTANTS StrongConsistency, BoundedStaleness,
           SessionConsistency, ConsistentPrefix,
           EventualConsistency
  CONSTANTS VersionBound, StalenessBound
 
+ WriteConstLevel ==
+    IF "WCL" \notin DOMAIN IOEnv THEN StrongConsistency
+    ELSE
+        CASE IOEnv.WCL = "strong" -> StrongConsistency
+        []  IOEnv.WCL = "session" -> SessionConsistency
+        []  IOEnv.WCL = "eventual" -> EventualConsistency
+     
  VARIABLES log, commitIndex, readIndex
 
  Keys == {"k1"}
@@ -16,59 +23,60 @@ CONSTANTS StrongConsistency, BoundedStaleness,
  dbVars == <<dbVarsExceptLog, log>>
 
  DB == INSTANCE CosmosDB WITH
-            WriteConsistencyLevel <- StrongConsistency,
+            WriteConsistencyLevel <- WriteConstLevel,
             \* Don't model data loss. It is not needed, and it allows a session
             \* token to expire after being acquired. Handling that would
             \* complicate this spec.
             epoch <- 1
+ 
+ Read(t, k) ==
+    IF "RCL" \notin DOMAIN IOEnv THEN DB!StrongConsistencyRead(k)
+    ELSE
+        CASE IOEnv.RCL = "strong" -> DB!StrongConsistencyRead(k)
+        []  IOEnv.RCL = "session" -> DB!SessionConsistencyRead(t, k)
+        []  IOEnv.RCL = "eventual" -> DB!EventualConsistencyRead(k)
 
 ---------------------------------------------------------------------
 
-NoSessionToken == DB!NoSessionToken
+Nil == DB!NoSessionToken
 
 TypesOK == DB!TypesOK
 
-VARIABLE serviceBus, frontendToken, backendValue, requests, pending
+VARIABLE messageQueue, future, backendValue, requests, pending
 
-specVars == <<serviceBus, frontendToken, backendValue, requests, pending>>
+specVars == <<messageQueue, future, backendValue, requests, pending>>
 vars == <<dbVars, specVars>>
 
 Init ==
-    /\ serviceBus = <<>>
-    /\ frontendToken = NoSessionToken
+    /\ messageQueue = <<>>
+    /\ future = Nil
     /\ backendValue = NoValue
     /\ pending = NoValue
     /\ requests = Values
     /\ DB!Init
 
 1FrontendWrite ==
-    /\ pending = NoValue
-    /\ frontendToken = NoSessionToken
+    /\ future = Nil
     /\ \E val \in requests: 
-        /\ DB!WriteInit("k1", val)
+        /\ DB!WriteInit("k1", val, LAMBDA t: future' = t)
         /\ pending' = val
-    /\ frontendToken' = DB!WriteInitToken
-    /\ UNCHANGED <<dbVarsExceptLog, requests, serviceBus, backendValue>>
+    /\ UNCHANGED <<dbVarsExceptLog, requests, messageQueue, backendValue>>
 
 3FrontendEnqueue ==
     /\ pending # NoValue
-    /\ serviceBus = <<>>
-    /\ frontendToken # NoSessionToken
-    /\ DB!WriteCanSucceed(frontendToken)
+    /\ DB!WriteSucceed(future)
     /\ requests' = requests \ { pending }
     /\ pending' = NoValue
-    /\ serviceBus' = << [ k |-> "k1", t |-> frontendToken ] >>
-    /\ UNCHANGED <<dbVars, frontendToken, backendValue>>
+    /\ messageQueue' = << [ k |-> "k1", t |-> future ] >>
+    /\ UNCHANGED <<dbVars, future, backendValue>>
 
 5BackendRead ==
-    /\ serviceBus # <<>>
-    /\ serviceBus' = Tail(serviceBus)
+    /\ messageQueue # <<>>
+    /\ messageQueue' = Tail(messageQueue)
     /\ \E read \in
-            DB!SessionConsistencyRead(Head(serviceBus).t, Head(serviceBus).k) :
-            \* DB!StrongConsistencyRead(Head(serviceBus).k) :
-            \* DB!EventualConsistencyRead(Head(serviceBus).k) :
+            Read(Head(messageQueue).t, Head(messageQueue).k) :
                 backendValue' = read.value
-    /\ UNCHANGED <<dbVars, requests, pending, frontendToken>>
+    /\ UNCHANGED <<dbVars, requests, pending, future>>
 
 cosmos ==
     /\ DB!Next
@@ -81,14 +89,12 @@ Next ==
     \/ cosmos
 
 Spec == /\ Init /\ [][Next]_vars
-        /\ WF_vars(1FrontendWrite \/ 3FrontendEnqueue)
         /\ WF_vars(5BackendRead)
-        /\ WF_vars(cosmos)
 
 ----------------------------------------------------------------------------
 
 WorkerReceivesCorrectValue ==
     \A val \in Values:
-        (val \notin requests) ~> backendValue = val
+        val \notin requests ~> backendValue = val
 
 ====
