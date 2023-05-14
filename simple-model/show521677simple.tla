@@ -10,8 +10,8 @@ CONSTANTS StrongConsistency, BoundedStaleness,
     IF "WCL" \notin DOMAIN IOEnv THEN StrongConsistency
     ELSE
         CASE IOEnv.WCL = "strong" -> StrongConsistency
-        []  IOEnv.WCL = "session" -> SessionConsistency
-        []  IOEnv.WCL = "eventual" -> EventualConsistency
+        []   IOEnv.WCL = "session" -> SessionConsistency
+        []   IOEnv.WCL = "eventual" -> EventualConsistency
      
  VARIABLES log, commitIndex, readIndex
 
@@ -33,8 +33,8 @@ CONSTANTS StrongConsistency, BoundedStaleness,
     IF "RCL" \notin DOMAIN IOEnv THEN DB!StrongConsistencyRead(k)
     ELSE
         CASE IOEnv.RCL = "strong" -> DB!StrongConsistencyRead(k)
-        []  IOEnv.RCL = "session" -> DB!SessionConsistencyRead(t, k)
-        []  IOEnv.RCL = "eventual" -> DB!EventualConsistencyRead(k)
+        []   IOEnv.RCL = "session" -> DB!SessionConsistencyRead(t, k)
+        []   IOEnv.RCL = "eventual" -> DB!EventualConsistencyRead(k)
 
 ---------------------------------------------------------------------
 
@@ -69,9 +69,10 @@ Init ==
 
 5BackendRead ==
     /\ queue # <<>>
-    /\ queue' = Tail(queue)
-    /\ \E read \in DBRead(Head(queue).t, Head(queue).k) :
+    /\ LET msg == Head(queue) IN
+       \E read \in DBRead(msg.t, msg.k) :
             backend' = read.value
+    /\ queue' = Tail(queue)
     /\ UNCHANGED <<dbVars, requests, future>>
 
 cosmos ==
@@ -84,7 +85,8 @@ Next ==
     \/ 5BackendRead
     \/ cosmos
 
-Spec == Init /\ [][Next]_vars /\ WF_vars(5BackendRead)
+Spec == 
+    Init /\ [][Next]_vars /\ WF_vars(5BackendRead)
 
 ----------------------------------------------------------------------------
 
