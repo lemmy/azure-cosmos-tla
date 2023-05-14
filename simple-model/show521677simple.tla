@@ -42,31 +42,28 @@ Nil == DB!NoSessionToken
 
 TypesOK == DB!TypesOK
 
-VARIABLE messageQueue, future, backendValue, requests, pending
+VARIABLE messageQueue, future, backendValue, requests
 
-specVars == <<messageQueue, future, backendValue, requests, pending>>
+specVars == <<messageQueue, future, backendValue, requests>>
 vars == <<dbVars, specVars>>
 
 Init ==
     /\ messageQueue = <<>>
     /\ future = Nil
     /\ backendValue = NoValue
-    /\ pending = NoValue
     /\ requests = Values
     /\ DB!Init
 
 1FrontendWrite ==
     /\ future = Nil
     /\ \E val \in requests: 
-        /\ DB!WriteInit("k1", val, LAMBDA t: future' = t)
-        /\ pending' = val
+        DB!WriteInit("k1", val, LAMBDA t: future' = t)
     /\ UNCHANGED <<dbVarsExceptLog, requests, messageQueue, backendValue>>
 
 3FrontendEnqueue ==
-    /\ pending # NoValue
+    /\ future # Nil
     /\ DB!WriteSucceed(future)
-    /\ requests' = requests \ { pending }
-    /\ pending' = NoValue
+    /\ requests' = requests \ { future.value }
     /\ messageQueue' = << [ k |-> "k1", t |-> future ] >>
     /\ UNCHANGED <<dbVars, future, backendValue>>
 
@@ -76,7 +73,7 @@ Init ==
     /\ \E read \in
             Read(Head(messageQueue).t, Head(messageQueue).k) :
                 backendValue' = read.value
-    /\ UNCHANGED <<dbVars, requests, pending, future>>
+    /\ UNCHANGED <<dbVars, requests, future>>
 
 cosmos ==
     /\ DB!Next

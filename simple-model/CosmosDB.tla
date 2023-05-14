@@ -86,7 +86,8 @@ SessionTokens == [
 \* as some arbitrarily valid session token.
 NoSessionToken == [
     checkpoint |-> 0,
-    epoch |-> 0
+    epoch |-> 0,
+    value |-> ""
 ]
 
 MaybeSessionTokens ==
@@ -214,9 +215,10 @@ WritesAccepted ==
 \* representative of that write.
 \* This token is suitable both as a fresh session token, and as an ephemeral
 \* token tracking the progress of a write from init to success or failure.
-WriteInitToken == [
+WriteInitToken(value) == [
     epoch |-> epoch,
-    checkpoint |-> Len(log) + 1
+    checkpoint |-> Len(log) + 1,
+    value |-> value
 ]
 
 \* This operator initiates a write, adding it to the log.
@@ -228,10 +230,10 @@ WriteInit(key, value, Op(_)) ==
             key |-> key,
             value |-> value
        ])
-    /\ Op(WriteInitToken)
+    /\ Op(WriteInitToken(value))
 
 SessionTokenIsValid(token) ==
-    SessionTokenLEQ(token, WriteInitToken)
+    SessionTokenLEQ(token, WriteInitToken(token.value))
 
 UpdateTokenFromRead(origToken, read) == [
     epoch |-> epoch,
