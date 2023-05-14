@@ -42,36 +42,36 @@ Nil == DB!NoSessionToken
 
 TypesOK == DB!TypesOK
 
-VARIABLE messageQueue, future, backendValue, requests
+VARIABLE queue, future, backend, requests
 
-specVars == <<messageQueue, future, backendValue, requests>>
+specVars == <<queue, future, backend, requests>>
 vars == <<dbVars, specVars>>
 
 Init ==
-    /\ messageQueue = <<>>
+    /\ queue = <<>>
     /\ future = Nil
-    /\ backendValue = NoValue
+    /\ backend = NoValue
     /\ requests = Values
     /\ DB!Init
 
 1FrontendWrite ==
     /\ future = Nil
     /\ \E val \in requests: DB!WriteInit("k", val, LAMBDA t: future' = t)
-    /\ UNCHANGED <<dbVarsExceptLog, requests, messageQueue, backendValue>>
+    /\ UNCHANGED <<dbVarsExceptLog, requests, queue, backend>>
 
 3FrontendEnqueue ==
     /\ future # Nil
     /\ DB!WriteSucceed(future)
     /\ requests' = requests \ { future.value }
-    /\ messageQueue' = << [ k |-> "k", t |-> future ] >>
-    /\ UNCHANGED <<dbVars, future, backendValue>>
+    /\ queue' = << [ k |-> "k", t |-> future ] >>
+    /\ UNCHANGED <<dbVars, future, backend>>
 
 5BackendRead ==
-    /\ messageQueue # <<>>
-    /\ messageQueue' = Tail(messageQueue)
+    /\ queue # <<>>
+    /\ queue' = Tail(queue)
     /\ \E read \in
-            Read(Head(messageQueue).t, Head(messageQueue).k) :
-                backendValue' = read.value
+            Read(Head(queue).t, Head(queue).k) :
+                backend' = read.value
     /\ UNCHANGED <<dbVars, requests, future>>
 
 cosmos ==
@@ -91,6 +91,6 @@ Spec == /\ Init /\ [][Next]_vars
 
 WorkerReceivesCorrectValue ==
     \A val \in Values:
-        val \notin requests ~> backendValue = val
+        val \notin requests ~> backend = val
 
 ====
