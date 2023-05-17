@@ -389,6 +389,6 @@ Init ==
 \* CosmosDBClient specs to see how specific writes should be modeled.
 Next ==
     \/ IncreaseReadIndexAndOrCommitIndex
-    \/ TruncateLog
+    \* \/ TruncateLog
 
 ====
